@@ -4,11 +4,11 @@ import time
 import asyncio
 import datetime
 from pathlib import Path
+from obswebsocket import obsws, requests
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.oauth import UserAuthenticationStorageHelper
-from obswebsocket import obsws, requests
 from twitchAPI.object.eventsub import ChannelChatMessageEvent
 
 if getattr(sys, 'frozen', False):
@@ -44,7 +44,6 @@ class WebsocketsManager:
         except Exception as e:
             print(f"Error connecting to OBS -- {e}")
             return False
-            # quit()
 
     def disconnect(self):
         self.ws.disconnect()
@@ -66,29 +65,33 @@ def refresh_total_goal():
     return cash_goal, cash_total
 
 
-def shutdown():
+async def shutdown():
     try:
         obs.disconnect()
+        print("OBS Disconnected"), time.sleep(0.5)
     except Exception as e:
-        print(f"Error shutting down OBS -- {e}")
+        print(f"Error shutting down OBS -- {e}"), time.sleep(0.5)
         pass
     try:
-        bot.close()
+        await bot.close()
+        print("Twitch Connection Closed"), time.sleep(0.5)
     except Exception as e:
-        print(f"Error shutting down twitch bot -- {e}")
+        print(f"Error shutting down twitch bot -- {e}"), time.sleep(0.5)
         pass
-    quit()
+    os._exit(1)
 
 
 async def on_stream_message(data: ChannelChatMessageEvent):
     cash_goal, cash_total = refresh_total_goal()
     if data.event.message.text.startswith("!cashapp"):
         if data.event.chatter_user_id in (id_streamer, "268136120"):
+            add = True
             error = False
             error_msg = f"{data.event.chatter_user_name} make sure the command is valid eh? !cashapp add/remove x"
             msg = data.event.message.text.replace(" ", "")
             amount = msg.removeprefix("!cashapp")
             if amount.startswith("add"):
+                amount = amount.removeprefix("add")
                 if amount.isdigit():
                     cash_total += int(amount)
                     with open(f"{data_path}cash_total", "w") as file:
@@ -97,6 +100,8 @@ async def on_stream_message(data: ChannelChatMessageEvent):
                     await bot.send_chat_message(id_streamer, id_streamer, error_msg)
                     error = True
             elif amount.startswith("remove"):
+                add = False
+                amount = amount.removeprefix("remove")
                 if amount.isdigit():
                     cash_total -= int(amount)
                     with open(f"{data_path}cash_total", "w") as file:
@@ -108,8 +113,8 @@ async def on_stream_message(data: ChannelChatMessageEvent):
                 await bot.send_chat_message(id_streamer, id_streamer, error_msg)
                 error = True
             if not error:
-                obs.set_text(obs_source_name, f"${cash_total}/{cash_goal}")
-                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Challenge Update; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left. ${cash_goal - cash_total} remaining.")
+                obs.set_text(obs_source_name, f"CashApp Bet\n${cash_total}/{cash_goal}\n$roningt81")
+                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${amount} {'contributed' if add else 'removed due to correction'}; ${cash_goal - cash_total} remaining; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left.")
         elif data.event.chatter_user_id in moderators:
             await bot.send_chat_message(id_streamer, id_streamer, f"This command is restricted to RoninGT and TheeChody temporarily")
         else:
@@ -117,11 +122,6 @@ async def on_stream_message(data: ChannelChatMessageEvent):
 
 
 async def run():
-    connect = obs.connect()
-    if not connect:
-        print("Error Establishing OBS Connection!!"), time.sleep(10)
-        shutdown()
-
     twitch_helper = UserAuthenticationStorageHelper(bot, target_scopes)
     await twitch_helper.bind()
 
@@ -132,35 +132,46 @@ async def run():
 
     while True:
         try:
-            option = input("Enter 1 to print out time remaining & Goal Progress\nEnter 2 to update cash app balance\nEnter 0 to exit program\n")
-            if option not in ('0', '1', '2'):
+            cash_add = 0
+            cash_remove = 0
+            option = input("Enter 1 to message remaining goal & time left\nEnter 2 to ADD to CashApp balance\nEnter 3 to REMOVE from CashApp balance\nEnter 0 to exit program\n")
+            if option not in ('0', '1', '2', '3'):
                 print("Please make a valid choice")
             elif option == "0":
-                print("Exiting program..\nProgram will close in 2 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(2)
-                shutdown()
+                print("Exiting program..\nProgram will close in 2 seconds, or close program manually"), time.sleep(2)
+                await shutdown()
             elif option == "1":
                 cash_goal, cash_total = refresh_total_goal()
-                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Challenge Update; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left. ${cash_goal - cash_total} remaining.")
+                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_goal - cash_total} remaining; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left.")
             elif option == "2":
                 cash_goal, cash_total = refresh_total_goal()
                 try:
-                    cash_add = int(input("Enter cash to add to total gathered;\n"))
+                    cash_add = int(input("Enter cash to ADD to total gathered;\n"))
                     cash_total += cash_add
                 except Exception as f:
                     print(f"Not Valid, try again -- {f}")
-                    pass
                 with open(f"{data_path}cash_total", "w") as file:
                     file.write(str(cash_total))
-                obs.set_text(obs_source_name, f"${cash_total}/{cash_goal}")
-                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Challenge Update; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left. ${cash_goal - cash_total} remaining.")
+                obs.set_text(obs_source_name, f"CashApp Bet\n${cash_total}/{cash_goal}\n$roningt81")
+                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_add} contributed to thee CashApp Bet; ${cash_goal - cash_total} remaining. {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left.")
+            elif option == "3":
+                cash_goal, cash_total = refresh_total_goal()
+                try:
+                    cash_remove = int(input("Enter cash to REMOVE from total gathered;\n"))
+                    cash_total -= cash_remove
+                except Exception as f:
+                    print(f"Not Valid, try again -- {f}")
+                with open(f"{data_path}cash_total", "w") as file:
+                    file.write(str(cash_total))
+                obs.set_text(obs_source_name, f"CashApp Bet\n${cash_total}/{cash_goal}\n$roningt81")
+                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_remove} removed due to correction; ${cash_goal - cash_total} remaining. {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)} time left")
             else:
                 print("IDK what key you pressed, but that wasn't valid"), time.sleep(5)
         except KeyboardInterrupt:
-            print("Exiting program..\nProgram will close in 2 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(2)
-            shutdown()
+            pass
         except Exception as e:
-            print(f"Error occurred -- {e}\nProgram will close in 120 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(120)
-            shutdown()
+            print(f"Error occurred -- {e}\nProgram will close in 120 seconds, or close program manually"), time.sleep(120)
+            await shutdown()
 
 
 if __name__ == "__main__":
@@ -194,11 +205,16 @@ if __name__ == "__main__":
         if obs_source_name == "":
             trigger += "obs_source_name\n"
     if trigger != "":
-        print(f"Please make sure all the files have the appropriate keys please\n\n\n{trigger}\nis(are) empty!\nProgram will close in 120 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(120)
-        quit()
+        print(f"Please make sure all the files have the appropriate keys please\n\n\n{trigger}\nis(are) empty!\nProgram will close in 120 seconds, or close program manually"), time.sleep(120)
+        os._exit(1)
 
     bot = BotSetup(twitch_client, twitch_secret)
     obs = WebsocketsManager()
+
+    connect = obs.connect()
+    if not connect:
+        print("Error Establishing OBS Connection!!"), time.sleep(10)
+        os._exit(1)
 
     try:
         initialize = input("Initialize program? Y/N\n")
@@ -230,16 +246,15 @@ if __name__ == "__main__":
             with open(f"{data_path}cash_total", "r") as file_cash_total:
                 cash_total = int(file_cash_total.read())
 
-        print(f"Initialization successful!\nTime Start; {time_start}\nTime Till End; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)}")
+        print(f"{'Initialization' if initialize else 'Files Loaded'} successful!\nTime Start; {time_start}\nTime Till End; {time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)}")
 
         obs.set_source_visibility(obs_scene_name, obs_source_name, True)
-        obs.set_text(obs_source_name, f"${cash_total}/{cash_goal}")
+        obs.set_text(obs_source_name, f"CashApp Bet\n${cash_total}/{cash_goal}\n$roningt81")
 
     except KeyboardInterrupt:
-        print("Exiting program..\nProgram will close in 2 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(2)
-        shutdown()
+        pass
     except Exception as e:
-        print(f"Error occurred -- {e}\nProgram will close in 120 seconds, or CTRL + C on keyboard or close program manually"), time.sleep(120)
-        shutdown()
+        print(f"Error occurred -- {e}\nProgram will close in 120 seconds, or close program manually"), time.sleep(120)
+        os._exit(1)
 
     asyncio.run(run())
