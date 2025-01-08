@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 import datetime
 from pathlib import Path
 from twitchAPI.twitch import Twitch
@@ -22,13 +23,11 @@ with open(f"{data_path}twitch_secret", "r") as file_secret:
     twitch_secret = file_secret.read()
 if twitch_client == "" or twitch_secret == "":
     print("Please make sure all the files have the appropriate keys please")
-    bot_files_loaded = False
-else:
-    bot_files_loaded = True
+    time.sleep(10)
+    quit()
 
 id_streamer = "50014629"  # "268136120"  # Chody  # "50014629"  # Ronin
-target_scopes = [AuthScope.CHANNEL_BOT, AuthScope.USER_READ_CHAT, AuthScope.USER_WRITE_CHAT,
-                 AuthScope.CHANNEL_MODERATE, AuthScope.USER_READ_BROADCAST, AuthScope.MODERATOR_MANAGE_CHAT_MESSAGES]
+target_scopes = [AuthScope.CHANNEL_BOT, AuthScope.USER_READ_CHAT, AuthScope.USER_WRITE_CHAT, AuthScope.CHANNEL_MODERATE, AuthScope.USER_READ_BROADCAST, AuthScope.MODERATOR_MANAGE_CHAT_MESSAGES]
 
 
 class BotSetup(Twitch):
