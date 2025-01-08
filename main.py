@@ -288,7 +288,7 @@ if __name__ == "__main__":
     connect = obs.connect()
     if not connect:
         print("Error Establishing OBS Connection!! Program will close in 5 sec"), time.sleep(5)
-        asyncio.run(shutdown())
+        os._exit(1)
 
     try:
         initialize = input("Initialize program? Y/N\n")
