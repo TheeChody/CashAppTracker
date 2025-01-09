@@ -59,7 +59,7 @@ def cls():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
-def refresh_total_goal():
+def refresh_goal_total():
     with open(f"{data_path}cash_goal.txt", "r") as file:
         cash_goal = int(file.read())
     with open(f"{data_path}cash_total.txt", "r") as file:
@@ -68,6 +68,9 @@ def refresh_total_goal():
 
 
 def time_left():
+    with open(f"{data_path}time_end.txt", "r") as file:
+        time_end = file.read()
+        time_end = datetime.datetime.strptime(time_end, time_format)
     return time_end - datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time_format)
 
 
@@ -90,13 +93,13 @@ async def shutdown():
 
 async def on_stream_message(data: ChannelChatMessageEvent):
     async def send_error_msg(message_id: str):
-        await bot.send_chat_message(id_streamer, id_streamer, f"Make sure the command is valid eh? !cashapp add/remove/change(goal/total) x", reply_parent_message_id=message_id)
+        await bot.send_chat_message(id_streamer, id_streamer, f"Make sure the command is valid eh? !cashapp add/remove/change(end/goal/total) x", reply_parent_message_id=message_id)
         return True
 
     if data.event.message.text.startswith("!cashapp"):
         message_id = data.event.message_id
         try:
-            cash_goal, cash_total = refresh_total_goal()
+            cash_goal, cash_total = refresh_goal_total()
             if data.event.chatter_user_id in (id_streamer, "268136120"):
                 add = True
                 error = False
@@ -128,7 +131,7 @@ async def on_stream_message(data: ChannelChatMessageEvent):
                         if amount.isdigit():
                             with open(f"{data_path}cash_goal.txt", "w") as file:
                                 file.write(str(amount))
-                            cash_goal, cash_total = refresh_total_goal()
+                            cash_goal, cash_total = refresh_goal_total()
                         else:
                             error = await send_error_msg(message_id)
                     elif amount.startswith("total"):
@@ -137,9 +140,18 @@ async def on_stream_message(data: ChannelChatMessageEvent):
                         if amount.isdigit():
                             with open(f"{data_path}cash_total.txt", "w") as file:
                                 file.write(str(amount))
-                            cash_goal, cash_total = refresh_total_goal()
+                            cash_goal, cash_total = refresh_goal_total()
                         else:
                             error = await send_error_msg(message_id)
+                    elif amount.startswith("end"):
+                        change = "end"
+                        try:
+                            new_end = datetime.datetime.strptime(data.event.message.text.removeprefix("!cashapp change end "), time_format)
+                        except Exception as g:
+                            await bot.send_chat_message(id_streamer, id_streamer, f"Error translating new end date -- {g if g != '' else 'NO ERROR MESSAGE...'}")
+                            return
+                        with open(f"{data_path}time_end.txt", "w") as file:
+                            file.write(str(new_end))
                     else:
                         error = await send_error_msg(message_id)
                 else:
@@ -147,14 +159,18 @@ async def on_stream_message(data: ChannelChatMessageEvent):
                 if change is None and not error:
                     remaining = int(cash_goal - cash_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(cash_goal):,}\n$roningt81")
-                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${amount} {'contributed' if add else 'removed due to correction'}; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${amount} {'contributed' if add else 'removed due to correction'}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
                 elif change is not None and not error:
                     remaining = int(cash_goal - cash_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(cash_goal):,}\n$roningt81")
                     if change == "goal":
-                        await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Goal Set @ ${int(cash_goal):,}; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
+                        await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Goal Set @ ${int(cash_goal):,}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
                     elif change == "total":
-                        await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Total Contributed Set @ ${int(cash_total):,}; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
+                        await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Total Contributed Set @ ${int(cash_total):,}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.", reply_parent_message_id=message_id)
+                    elif change == "end":
+                        with open(f"{data_path}time_end.txt", "r") as file:
+                            time_end = file.read()
+                        await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New End Date Set: {time_end}; New Time Remaining: {time_left()}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}")
             elif data.event.chatter_user_id in moderators:
                 await bot.send_chat_message(id_streamer, id_streamer, f"This command is restricted to RoninGT and TheeChody temporarily", reply_parent_message_id=message_id)
             else:
@@ -176,17 +192,17 @@ async def run():
     while True:
         cls()
         try:
-            option = input("Enter 1 to message remaining goal & time left\nEnter 2 to ADD to CashApp balance\nEnter 3 to REMOVE from CashApp balance\nEnter 4 to change goal\nEnter 5 to change total contributed\nEnter 0 to exit program\n")
+            option = input("Enter 1 to message remaining goal & time left\nEnter 2 to ADD to CashApp balance\nEnter 3 to REMOVE from CashApp balance\nEnter 4 to change goal\nEnter 5 to change total contributed\nEnter 6 to change bet time limit\nEnter 0 to exit program\n")
             cls()
-            cash_goal, cash_total = refresh_total_goal()
-            if option not in ('0', '1', '2', '3', '4', '5'):
+            cash_goal, cash_total = refresh_goal_total()
+            if option not in ('0', '1', '2', '3', '4', '5', '6'):
                 print("Please make a valid choice"), time.sleep(2)
             elif option == "0":
                 print("Exiting program..\nProgram will close in 2 seconds"), time.sleep(2)
                 await shutdown()
             elif option == "1":
                 remaining = int(cash_goal - cash_total)
-                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.")
+                await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.")
             elif option == "2":
                 while True:
                     try:
@@ -199,7 +215,7 @@ async def run():
                         file.write(str(cash_total))
                     remaining = int(cash_goal - cash_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(cash_goal):,}\n$roningt81")
-                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_add} contributed; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.")
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_add} contributed; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.")
                     break
             elif option == "3":
                 while True:
@@ -213,7 +229,7 @@ async def run():
                         file.write(str(cash_total))
                     remaining = int(cash_goal - cash_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(cash_goal):,}\n$roningt81")
-                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_remove} removed due to correction; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.")
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; ${cash_remove} removed due to correction; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.")
                     break
             elif option == "4":
                 while True:
@@ -226,7 +242,7 @@ async def run():
                         file.write(str(new_goal))
                     remaining = int(new_goal - cash_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(new_goal):,}\n$roningt81")
-                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Goal Set @ ${int(new_goal):,}; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.")
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Goal Set: ${int(new_goal):,}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.")
                     break
             elif option == "5":
                 while True:
@@ -239,7 +255,21 @@ async def run():
                         file.write(str(new_total))
                     remaining = int(cash_goal - new_total)
                     obs.set_text(obs_source_name, f"CashApp Bet\n${int(new_total):,}/${int(cash_goal):,}\n$roningt81")
-                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Total Contributed Set @ ${int(new_total):,}; ${f'{remaining:,} remaining' if remaining >= 0 else f'{abs(remaining):,} extra for Ronin'}; Time Left: {time_left()}.")
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New Total Contributed Set: ${int(new_total):,}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}; Time Left: {time_left()}.")
+                    break
+            elif option == "6":
+                while True:
+                    try:
+                        new_end = input("Input end date; YYYY-mm-dd HH:MM:SS\n")
+                        new_end = datetime.datetime.strptime(new_end, time_format)
+                        with open(f"{data_path}time_end.txt", "w") as file:
+                            file.write(str(new_end))
+                    except Exception as f:
+                        print(f"Not Valid, try again -- {f if f != '' else 'NO ERROR MESSAGE...'}"), time.sleep(2.5)
+                        break
+                    remaining = int(cash_goal - cash_total)
+                    obs.set_text(obs_source_name, f"CashApp Bet\n${int(cash_total):,}/${int(cash_goal):,}\n$roningt81")
+                    await bot.send_chat_message(id_streamer, id_streamer, f"CashApp Bet Update; New End Date Set: {str(new_end)}; New Time Remaining: {time_left()}; ${f'{remaining:,} Remaining' if remaining >= 0 else f'{abs(remaining):,} Extra for Ronin'}.")
                     break
             else:
                 print("IDK what key you pressed, but that wasn't valid"), time.sleep(5)
