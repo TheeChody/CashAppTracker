@@ -87,7 +87,7 @@ async def flash_window(who: str):
         os.system(f"color 17"), time.sleep(flash_speed)
         os.system(f"color 47"), time.sleep(flash_speed)
         for x in range(1, flash_frequency):
-            os.system("color 07"), time.sleep(flash_speed)
+            os.system("color 07"), time.sleep(flash_speed / 2)
             os.system(f"color 17"), time.sleep(flash_speed)
             os.system(f"color 47"), time.sleep(flash_speed)
         os.system("color 07"), time.sleep(5)
